@@ -127,7 +127,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 
-def add_new(news_data):
+def add_news_to_db(news_data):
     """
     add new to db
     :param news_data: news info
@@ -146,18 +146,18 @@ def add_new(news_data):
     session.close()
 
 
-def get_new_info(search_term, is_initial=False):
+def fetch_news_info(search_term, is_initial_fetch=False):
     """
     get new
 
     :param search_term:
-    :param is_initial:
+    :param is_initial_fetch:
     :return:
     """
     all_news_data = []
     # iterate pages to get more news data, not actually get all news data
-    if is_initial:
-        a = []
+    if is_initial_fetch:
+        page_results = []
         for p in range(1, 10):
             p2 = {
                 "page": p,
@@ -166,9 +166,9 @@ def get_new_info(search_term, is_initial=False):
                 "type": "searchword",
             }
             response = requests.get("https://udn.com/api/more", params=p2)
-            a.append(response.json()["lists"])
+            page_results.append(response.json()["lists"])
 
-        for l in a:
+        for l in page_results:
             all_news_data.append(l)
     else:
         p = {
@@ -182,14 +182,14 @@ def get_new_info(search_term, is_initial=False):
         all_news_data = response.json()["lists"]
     return all_news_data
 
-def get_new(is_initial=False):
+def fetch_and_store_news(is_initial_fetch=False):
     """
     get new info
 
-    :param is_initial:
+    :param is_initial_fetch:
     :return:
     """
-    news_data = get_new_info("價格", is_initial=is_initial)
+    news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
     for news in news_data:
         title = news["title"]
         m = [
@@ -203,8 +203,8 @@ def get_new(is_initial=False):
             model="gpt-3.5-turbo",
             messages=m,
         )
-        relevance = ai.choices[0].message.content
-        if relevance == "high":
+        relevance_score = ai.choices[0].message.content
+        if relevance_score == "high":
             response = requests.get(news["titleLink"])
             soup = BeautifulSoup(response.text, "html.parser")
             # 標題
@@ -240,7 +240,7 @@ def get_new(is_initial=False):
             result = json.loads(result)
             detailed_news["summary"] = result["影響"]
             detailed_news["reason"] = result["原因"]
-            add_new(detailed_news)
+            add_news_to_db(detailed_news)
 
 
 @app.on_event("startup")
@@ -248,9 +248,9 @@ def start_scheduler():
     db = SessionLocal()
     if db.query(NewsArticle).count() == 0:
         # should change into simple factory pattern
-        get_new()
+        fetch_and_store_news()
     db.close()
-    bgs.add_job(get_new, "interval", minutes=100)
+    bgs.add_job(fetch_and_store_news, "interval", minutes=100)
     bgs.start()
 
 
@@ -259,7 +259,7 @@ def shutdown_scheduler():
     bgs.shutdown()
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 
 
@@ -272,15 +272,15 @@ def session_opener():
 
 
 
-def verify(p1, p2):
-    return pwd_context.verify(p1, p2)
+def verify_password(p1, p2):
+    return password_context.verify_password(p1, p2)
 
 
-def check_user_password_is_correct(db, n, pwd):
-    OuO = db.query(User).filter(User.username == n).first()
-    if not verify(pwd, OuO.hashed_password):
+def is_user_password_correct(db, n, password):
+    user = db.query(User).filter(User.username == n).first()
+    if not verify_password(password, user.hashed_password):
         return False
-    return OuO
+    return user
 
 
 def authenticate_user_token(
@@ -309,7 +309,7 @@ async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(session_opener)
 ):
     """login"""
-    user = check_user_password_is_correct(db, form_data.username, form_data.password)
+    user = is_user_password_correct(db, form_data.username, form_data.password)
     access_token = create_access_token(
         data={"sub": str(user.username)}, expires_delta=timedelta(minutes=30)
     )
@@ -321,7 +321,7 @@ class UserAuthSchema(BaseModel):
 @app.post("/api/v1/users/register")
 def create_user(user: UserAuthSchema, db: Session = Depends(session_opener)):
     """create user"""
-    hashed_password = pwd_context.hash(user.password)
+    hashed_password = password_context.hash(user.password)
     db_user = User(username=user.username, hashed_password=hashed_password)
     db.add(db_user)
     db.commit()
@@ -330,14 +330,14 @@ def create_user(user: UserAuthSchema, db: Session = Depends(session_opener)):
 
 
 @app.get("/api/v1/users/me")
-def read_users_me(user=Depends(authenticate_user_token)):
+def get_logged_in_user(user=Depends(authenticate_user_token)):
     return {"username": user.username}
 
 
 _id_counter = itertools.count(start=1000000)
 
 
-def get_article_upvote_details(article_id, uid, db):
+def get_news_article_upvote_details(article_id, uid, db):
     cnt = (
         db.query(user_news_association_table)
         .filter_by(news_articles_id=article_id)
@@ -355,7 +355,7 @@ def get_article_upvote_details(article_id, uid, db):
 
 
 @app.get("/api/v1/news/news")
-def read_news(db=Depends(session_opener)):
+def get_all_news_articles(db=Depends(session_opener)):
     """
     read new
 
@@ -365,7 +365,7 @@ def read_news(db=Depends(session_opener)):
     news = db.query(NewsArticle).order_by(NewsArticle.time.desc()).all()
     result = []
     for n in news:
-        upvotes, upvoted = get_article_upvote_details(n.id, None, db)
+        upvotes, upvoted = get_news_article_upvote_details(n.id, None, db)
         result.append(
             {**n.__dict__, "upvotes": upvotes, "is_upvoted": upvoted}
         )
@@ -375,7 +375,7 @@ def read_news(db=Depends(session_opener)):
 @app.get(
     "/api/v1/news/user_news"
 )
-def read_user_news(
+def get_user_specific_news(
         db=Depends(session_opener),
         u=Depends(authenticate_user_token)
 ):
@@ -389,7 +389,7 @@ def read_user_news(
     news = db.query(NewsArticle).order_by(NewsArticle.time.desc()).all()
     result = []
     for article in news:
-        upvotes, upvoted = get_article_upvote_details(article.id, u.id, db)
+        upvotes, upvoted = get_news_article_upvote_details(article.id, u.id, db)
         result.append(
             {
                 **article.__dict__,
@@ -420,7 +420,7 @@ async def search_news(request: PromptRequest):
     )
     keywords = completion.choices[0].message.content
     # should change into simple factory pattern
-    news_items = get_new_info(keywords, is_initial=False)
+    news_items = fetch_news_info(keywords, is_initial_fetch=False)
     for news in news_items:
         try:
             response = requests.get(news["titleLink"])
@@ -478,26 +478,26 @@ async def news_summary(
 
 
 @app.post("/api/v1/news/{id}/upvote")
-def upvote_article(
+def handle_news_article_upvote(
         id,
         db=Depends(session_opener),
         u=Depends(authenticate_user_token),
 ):
-    message = toggle_upvote(id, u.id, db)
+    message = toggle_news_article_upvote(id, u.id, db)
     return {"message": message}
 
 
-def toggle_upvote(n_id, u_id, db):
+def toggle_news_article_upvote(username_id, u_id, db):
     existing_upvote = db.execute(
         select(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
+            user_news_association_table.c.news_articles_id == username_id,
             user_news_association_table.c.user_id == u_id,
         )
     ).scalar()
 
     if existing_upvote:
         delete_stmt = delete(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
+            user_news_association_table.c.news_articles_id == username_id,
             user_news_association_table.c.user_id == u_id,
         )
         db.execute(delete_stmt)
@@ -505,7 +505,7 @@ def toggle_upvote(n_id, u_id, db):
         return "Upvote removed"
     else:
         insert_stmt = insert(user_news_association_table).values(
-            news_articles_id=n_id, user_id=u_id
+            news_articles_id=username_id, user_id=u_id
         )
         db.execute(insert_stmt)
         db.commit()
