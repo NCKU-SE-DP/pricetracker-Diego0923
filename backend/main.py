@@ -146,17 +146,17 @@ def add_news_to_db(news_data):
     session.close()
 
 
-def fetch_news_info(search_term, is_initial_fetch_fetch=False):
+def fetch_news_info(search_term, is_initial_fetch=False):
     """
     get new
 
     :param search_term:
-    :param is_initial_fetch_fetch:
+    :param is_initial_fetch:
     :return:
     """
     all_news_data = []
     # iterate pages to get more news data, not actually get all news data
-    if is_initial_fetch_fetch:
+    if is_initial_fetch:
         page_results = []
         for p in range(1, 10):
             p2 = {
@@ -182,14 +182,14 @@ def fetch_news_info(search_term, is_initial_fetch_fetch=False):
         all_news_data = response.json()["lists"]
     return all_news_data
 
-def fetch_and_store_news(is_initial_fetch_fetch=False):
+def fetch_and_store_news(is_initial_fetch=False):
     """
     get new info
 
-    :param is_initial_fetch_fetch:
+    :param is_initial_fetch:
     :return:
     """
-    news_data = fetch_news_info("價格", is_initial_fetch_fetch=is_initial_fetch_fetch)
+    news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
     for news in news_data:
         title = news["title"]
         m = [
@@ -277,14 +277,14 @@ def verify_password(p1, p2):
 
 
 def is_user_password_correct(db, n, password):
-    user = db.query(User).filter(User.usernae == n).first()
+    user = db.query(User).filter(User.username == n).first()
     if not verify_password(password, user.hashed_password):
         return False
     return user
 
 
 def authenticate_user_token(
-    token = Depends(oauth2_schee),
+    token = Depends(oauth2_scheme),
     db = Depends(session_opener)
 ):
     payload = jwt.decode(token, '1892dhianiandowqd0n', algorithms=["HS256"])
@@ -420,7 +420,7 @@ async def search_news(request: PromptRequest):
     )
     keywords = completion.choices[0].message.content
     # should change into simple factory pattern
-    news_items = fetch_news_info(keywords, is_initial_fetch_fetch_fetch=False)
+    news_items = fetch_news_info(keywords, is_initial_fetch=False)
     for news in news_items:
         try:
             response = requests.get(news["titleLink"])
