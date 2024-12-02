@@ -1,5 +1,5 @@
 import abc
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, ConfigDict
 from tldextract import tldextract
 from sqlalchemy.orm import Session
 from src.crawler.exceptions import DomainMismatchException
@@ -9,14 +9,16 @@ from typing import Union, List, Tuple
 class Headline(BaseModel):
     title: str = Field(
         default=...,
-        example="Title of the article",
+        examples=["Title of the article"],
         description="The title of the article"
     )
-    url: Union[AnyHttpUrl, str] = Field(
+    url: AnyHttpUrl | str = Field(
         default=...,
-        example="https://www.example.com",
+        validation_alias="titleLink",
+        examples=["https://www.example.com"],
         description="The URL of the article"
     )
+    model_config = ConfigDict(populate_by_name=True)
 
 class News(Headline):
     time: str = Field(

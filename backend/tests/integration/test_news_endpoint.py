@@ -10,6 +10,7 @@ from src.database import get_db
 from src.schemas import NewsSummaryRequestSchema, PromptRequest
 from src.routers.authenticate import password_context
 from unittest.mock import Mock
+from src.crawler.crawler_base import Headline
 
 
 SECRET_KEY = "1892dhianiandowqd0n"
@@ -127,12 +128,10 @@ def mock_openai(mocker, return_content):
 
 def test_search_news(mocker):
     mock_openai(mocker, "keywords")
-
-    mock_get_new_info = mocker.patch("src.routers.news.fetch_news_info", return_value=[
-        {"titleLink": "http://example.com/news1"}
-    ])
-
-    mock_get = mocker.patch("src.routers.news.requests.get", return_value=mocker.Mock(
+    mock_headline = [Headline(title="", url="http://example.com/news1")]
+    mock_get_new_info = mocker.patch("src.routers.news.fetch_news_info", return_value=mock_headline)
+    
+    mock_get = mocker.patch("src.crawler.udn_crawler.requests.get", return_value=mocker.Mock(
         text="""
         <html>
         <h1 class="article-content__title">Test Title</h1>

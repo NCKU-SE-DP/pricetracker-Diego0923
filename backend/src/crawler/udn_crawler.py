@@ -31,8 +31,10 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 from urllib.parse import quote
 from src.crawler.crawler_base import NewsCrawlerBase, Headline, News, NewsWithSummary
-from typing import Union, Tuple, Optional, Dict
+from src.models import NewsArticle
 from pydantic import AnyHttpUrl
+import requests
+
 class UDNCrawler(NewsCrawlerBase):
     CHANNEL_ID = 2
 
@@ -52,7 +54,7 @@ class UDNCrawler(NewsCrawlerBase):
         return self.get_headline(search_term, page=(1, 10))
     
     def get_headline(
-        self, search_term: str, page: Union[int, Tuple[int, int]]
+        self, search_term: str, page: int | tuple[int, int]
     ) -> list[Headline]:
         # Calculate the range of pages to fetch news from.
         # If 'page' is a tuple, unpack it and create a range representing those pages (inclusive).
@@ -63,7 +65,7 @@ class UDNCrawler(NewsCrawlerBase):
         )
         headlines = []
         for p in page_range:
-            headlines.extend(self._fetch_news(p, search_term))
+            headlines.extend(self._fetch_news(page=p,search_term=search_term))
         return headlines
     
     def _fetch_news(self, page: int, search_term: str) -> list[Headline]:
@@ -79,10 +81,9 @@ class UDNCrawler(NewsCrawlerBase):
             "type": "searchword",
         }
     
-    def _perform_request(self, url: Optional[str] = None, params: Optional[Dict] = None) -> Response:
+    def _perform_request(self, url: str | None = None, params: dict = None) -> Response:
         try:
-            response = get(self.news_website_url, params=params, timeout=self.timeout)
-            response.raise_for_status()
+            response = requests.get(url, params=params)
             return response
         except Exception as e:
             raise ConnectionError(f"Failed to fetch data: {e}")
@@ -97,9 +98,9 @@ class UDNCrawler(NewsCrawlerBase):
             for item in data["lists"]
         ]
     
-    def parse(self, url: Union[AnyHttpUrl, str]) -> News:
-        response = self._perform_request(params=None, url=url)
-        soup = BeautifulSoup(response.content, "html.parser")
+    def parse(self, url: str) -> News:
+        response = self._perform_request(url=url)
+        soup = BeautifulSoup(response.text, "html.parser")
         return self._extract_news(soup, url)
     
     @staticmethod
@@ -120,8 +121,28 @@ class UDNCrawler(NewsCrawlerBase):
         )
     
     def save(self, news: NewsWithSummary, db: Session):
-        db.add(news)
-        self._commit_changes(db)
+        new_exist = db.query(NewsArticle).filter_by(url=news.url).first()
+        if new_exist:
+            print(f"News with URL {news.url} already exists. Skipping save.")
+            return new_exist  # 返回现有记录，方便调用者处理
+
+        new_article = NewsArticle(
+            url=news.url,
+            title=news.title,
+            time=news.time,
+            content=news.content,
+            summary=news.summary,
+            reason=news.reason,
+        )
+        db.add(new_article)
+        try:
+            self._commit_changes(db)
+            return new_article
+        except Exception as e:
+            print(f"保存新闻时发生错误：{e}")
+            raise
+        finally:
+            db.close()
         
     @staticmethod
     def _commit_changes(db: Session):

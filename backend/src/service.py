@@ -12,7 +12,8 @@ from openai import OpenAI
 from urllib.parse import quote
 from fastapi import Depends
 from .database import get_db
-
+from src.crawler.udn_crawler import UDNCrawler
+crawler = UDNCrawler()
 # 設定密碼加密上下文
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -40,118 +41,12 @@ def create_access_token(data, expires_delta=None):
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
 
-
-def add_news_to_db(news_data: dict, db: Session):
-    """
-    將新聞資料添加到資料庫中
-    """
-    news_article = NewsArticle(
-        url=news_data["url"],
-        title=news_data["title"],
-        time=news_data["time"],
-        content=" ".join(news_data["content"]),
-        summary=news_data["summary"],
-        reason=news_data["reason"],
-    )
-    db.add(news_article)
-    db.commit()
-
 def fetch_news_info(search_term, is_initial_fetch=False):
-    """
-    get new
-
-    :param search_term:
-    :param is_initial_fetch:
-    :return:
-    """
-    all_news_data = []
-    # iterate pages to get more news data, not actually get all news data
     if is_initial_fetch:
-        page_results = []
-        for page_number in INITIAL_FETCH_PAGE_RANGE:
-            query_params = {
-                "page": page_number,
-                "id": f"search:{quote(search_term)}",
-                "channelId": 2,
-                "type": "searchword",
-            }
-            response = requests.get("https://udn.com/api/more", params=query_params)
-            page_results.append(response.json()["lists"])
-
-        for page in page_results:
-            all_news_data.append(page)
+        return crawler.startup(search_term=search_term)
     else:
-        query_params = {
-            "page": 1,
-            "id": f"search:{quote(search_term)}",
-            "channelId": 2,
-            "type": "searchword",
-        }
-        response = requests.get("https://udn.com/api/more", params=query_params)
-
-        all_news_data = response.json()["lists"]
-    return all_news_data
-
-def fetch_and_store_news(is_initial_fetch=False):
-    """
-    get new info
-
-    :param is_initial_fetch:
-    :return:
-    """
-    news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
-    for news in news_data:
-        title = news["title"]
-        message_payload = [
-            {
-                "role": "system",
-                "content": "你是一個關聯度評估機器人，請評估新聞標題是否與「民生用品的價格變化」相關，並給予'high'、'medium'、'low'評價。(僅需回答'high'、'medium'、'low'三個詞之一)",
-            },
-            {"role": "user", "content": f"{title}"},
-        ]
-        ai = OpenAI(api_key="xxx").chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=message_payload,
-        )
-        relevance_score = ai.choices[0].message.content
-        if relevance_score == "high":
-            response = requests.get(news["titleLink"])
-            parsed_html_content = BeautifulSoup(response.text, "html.parser")
-            # 標題
-            article_title = parsed_html_content.find("h1", class_="article-content__title").text
-            time = parsed_html_content.find("time", class_="article-content__time").text
-            # 定位到包含文章内容的 <section>
-            content_section = parsed_html_content.find("section", class_="article-content__editor")
-
-            paragraphs = [
-                paragraph.text
-                for paragraph in content_section.find_all("p")
-                if paragraph.text.strip() != "" and "▪" not in paragraph.text
-            ]
-            detailed_news = {
-                "url": news["titleLink"],
-                "title": article_title,
-                "time": time,
-                "content": paragraphs,
-            }
-            message_payload = [
-                {
-                    "role": "system",
-                    "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
-                },
-                {"role": "user", "content": " ".join(detailed_news["content"])},
-            ]
-
-            completion = OpenAI(api_key="xxx").chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=message_payload,
-            )
-            summary_result = completion.choices[0].message.content
-            summary_result = json.loads(summary_result)
-            detailed_news["summary"] = summary_result["影響"]
-            detailed_news["reason"] = summary_result["原因"]
-            add_news_to_db(detailed_news)
-
+        return crawler.get_headline(search_term=search_term, page=1)
+    
 def get_news_article_upvote_details(article_id, uid, db):
     cnt = (
         db.query(user_news_association_table)
