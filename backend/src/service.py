@@ -6,9 +6,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, delete, insert
 from .config import JWT_SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES, INITIAL_FETCH_PAGE_RANGE, DEFAULT_TOKEN_EXPIRE_MINUTES
 from .models import User, NewsArticle, user_news_association_table
-import requests
-from bs4 import BeautifulSoup
-from openai import OpenAI
 from urllib.parse import quote
 from fastapi import Depends
 from .database import get_db
