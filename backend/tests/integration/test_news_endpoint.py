@@ -121,7 +121,6 @@ def mock_openai(mocker, return_content):
 
     #mock_completion = Mock()
     #mock_completion.choices = [mock_choice]
-
     mock_openai_client = mocker.patch('src.llm_client.openai_client.AIResponder._generate_text')
     mock_openai_client.return_value = return_content
 
