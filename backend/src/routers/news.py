@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from fastapi import APIRouter, HTTPException, Depends, Query
 from openai import OpenAI
 import json
-from ..config import OPENAI_API_KEY, DEFAULT_SCHEDULER_INTERVAL_MINUTES
+from ..config import OPENAI_API_KEY, PriceChangeRelevance, newsImpactAndCause, DesiredKeywords
 from ..database import get_db, SessionLocal
 from ..models import NewsArticle, User
 from ..schemas import PromptRequest, NewsSummaryRequestSchema
@@ -36,10 +36,10 @@ def fetch_and_store_news(is_initial_fetch=False):
     news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
     for news in news_data:
         title = news["title"]
-        relevance_score = airesponder.ai_respond(title,"你是一個關聯度評估機器人，請評估新聞標題是否與「民生用品的價格變化」相關，並給予'high'、'medium'、'low'評價。(僅需回答'high'、'medium'、'low'三個詞之一)")
+        relevance_score = airesponder.ai_respond(title,PriceChangeRelevance)
         if relevance_score == "high":
             detailed_news = process_news_item(news)
-            summary_result = airesponder.ai_respond(" ".join(detailed_news["content"]),"你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})")
+            summary_result = airesponder.ai_respond(" ".join(detailed_news["content"]),newsImpactAndCause)
             if summary_result:
                 summary_result = json.loads(summary_result)
                 detailed_news["summary"] = summary_result["影響"]
@@ -96,7 +96,7 @@ def get_user_specific_news(
 @router.post("/api/v1/news/news_summary")
 async def news_summary(payload: NewsSummaryRequestSchema, current_user: User = Depends(authenticate_user_token)):
     response = {}
-    result = airesponder.ai_respond(payload.content,"你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})")
+    result = airesponder.ai_respond(payload.content,newsImpactAndCause)
     if result:
         result = json.loads(result)
         response["summary"] = result["影響"]
@@ -158,7 +158,7 @@ def parse_summary_result(result):
 async def search_news(request: PromptRequest):
     prompt = request.prompt
     news_list = []
-    keywords = airesponder.ai_respond(prompt,"你是一個關鍵字提取機器人，用戶將會輸入一段文字，表示其希望看見的新聞內容，請提取出用戶希望看見的關鍵字，請截取最重要的關鍵字即可，避免出現「新聞」、「資訊」等混淆搜尋引擎的字詞。(僅須回答關鍵字，若有多個關鍵字，請以空格分隔)")
+    keywords = airesponder.ai_respond(prompt,DesiredKeywords)
     # Should change into simple factory pattern
     news_items = fetch_news_info(keywords, is_initial_fetch=False)
     for news_item in news_items:
