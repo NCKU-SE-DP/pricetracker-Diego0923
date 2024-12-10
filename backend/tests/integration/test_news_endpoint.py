@@ -11,6 +11,7 @@ from src.schemas import NewsSummaryRequestSchema, PromptRequest
 from src.routers.authenticate import password_context
 from unittest.mock import Mock
 from src.crawler.crawler_base import Headline
+from src.config import testai
 
 
 SECRET_KEY = "1892dhianiandowqd0n"
@@ -121,7 +122,7 @@ def mock_openai(mocker, return_content):
 
     #mock_completion = Mock()
     #mock_completion.choices = [mock_choice]
-    mock_openai_client = mocker.patch('src.llm_client.openai_client.AIResponder._generate_text')
+    mock_openai_client = mocker.patch('src.llm_client.base.LLMClientTemplate._generate_text')
     mock_openai_client.return_value = return_content
 
     return mock_openai_client
@@ -169,7 +170,31 @@ def test_news_summary(mocker, test_token):
     assert json_response["summary"] == "test impact"
     assert json_response["reason"] == "test reason"
 
+def test_news_summary_custom_model_OpenAI(test_token):
+    payload = {
+        "content": testai,
+        "ai_model": "openai"
+    }
+    headers = {"Authorization": f"Bearer {test_token}"}
+    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
 
+    assert response.status_code == 200
+    json_response = response.json()
+    assert json_response["summary"] == "custom impact"
+    assert json_response["reason"] == "custom reason"
+
+def test_news_summary_custom_model_Anthropic(test_token):
+    payload = {
+        "content": testai,
+        "ai_model": "anthropic"
+    }
+    headers = {"Authorization": f"Bearer {test_token}"}
+    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
+
+    assert response.status_code == 200
+    json_response = response.json()
+    assert json_response["summary"] == "custom impact"
+    assert json_response["reason"] == "custom reason"
 def test_upvote_article(test_user_and_articles, test_token):
     user, articles = test_user_and_articles
     headers = {"Authorization": f"Bearer {test_token}"}

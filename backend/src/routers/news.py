@@ -157,7 +157,7 @@ def parse_summary_result(result):
             return response_data
     return response_data
 
-@router.post("/news_summary_custom_model")
+@router.post("/api/v1/news/news_summary_custom_model")
 async def news_summary_custom_model(
         payload: NewsSummaryCustomModelSchema, 
         u=Depends(authenticate_user_token)
