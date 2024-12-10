@@ -15,6 +15,9 @@ SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", 1.0
 # OpenAI API 金鑰
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your_openai_api_key")  # 確保替換為您的 OpenAI API 金鑰
 
+# Anthropic API 金鑰
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "your_anthropic_api_key")  # 確保替換為您的 ANTHROPIC_API_KEY 金鑰
+
 # 背景任務排程間隔
 DEFAULT_SCHEDULER_INTERVAL_MINUTES = int(os.getenv("DEFAULT_SCHEDULER_INTERVAL_MINUTES", 100))
 

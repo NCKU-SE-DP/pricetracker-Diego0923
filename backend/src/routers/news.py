@@ -5,21 +5,23 @@ from bs4 import BeautifulSoup
 from fastapi import APIRouter, HTTPException, Depends, Query
 from openai import OpenAI
 import json
-from ..config import OPENAI_API_KEY, PriceChangeRelevance, newsImpactAndCause, DesiredKeywords
+from ..config import OPENAI_API_KEY, ANTHROPIC_API_KEY
 from ..database import get_db, SessionLocal
 from ..models import NewsArticle, User
-from ..schemas import PromptRequest, NewsSummaryRequestSchema
+from ..schemas import PromptRequest, NewsSummaryRequestSchema, NewsSummaryCustomModelSchema
 from sqlalchemy.orm import Session
 from ..service import get_news_article_upvote_details
 from ..dependence import authenticate_user_token
 from ..service import toggle_news_article_upvote, fetch_news_info
 from src.crawler.udn_crawler import UDNCrawler
 import itertools
-from src.llm_client.openai_client import AIResponder
+from src.llm_client.openai_client import OpenAIClient
+from src.llm_client.anthropic_client import AnthropicClient
 
 router = APIRouter()  
 crawler = UDNCrawler()
-airesponder = AIResponder(api_key=OPENAI_API_KEY)
+openai_client = OpenAIClient(api_key=OPENAI_API_KEY)
+anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY)
 
 def add_news_to_db(news_data):
     """
@@ -36,10 +38,10 @@ def fetch_and_store_news(is_initial_fetch=False):
     news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
     for news in news_data:
         title = news["title"]
-        relevance_score = airesponder.ai_respond(title,PriceChangeRelevance)
+        relevance_score = openai_client.evaluate_relevance(title)
         if relevance_score == "high":
             detailed_news = process_news_item(news)
-            summary_result = airesponder.ai_respond(" ".join(detailed_news["content"]),newsImpactAndCause)
+            summary_result = openai_client.generate_summary(" ".join(detailed_news["content"]))
             if summary_result:
                 summary_result = json.loads(summary_result)
                 detailed_news["summary"] = summary_result["影響"]
@@ -96,7 +98,7 @@ def get_user_specific_news(
 @router.post("/api/v1/news/news_summary")
 async def news_summary(payload: NewsSummaryRequestSchema, current_user: User = Depends(authenticate_user_token)):
     response = {}
-    result = airesponder.ai_respond(payload.content,newsImpactAndCause)
+    result = openai_client.generate_summary(payload.content)
     if result:
         result = json.loads(result)
         response["summary"] = result["影響"]
@@ -154,11 +156,27 @@ def parse_summary_result(result):
         except json.JSONDecodeError:
             return response_data
     return response_data
+
+@router.post("/news_summary_custom_model")
+async def news_summary_custom_model(
+        payload: NewsSummaryCustomModelSchema, 
+        u=Depends(authenticate_user_token)
+):
+    """
+    Get summary of the news article using a custom AI model (OpenAI or Anthropic).
+    """
+    if payload.ai_model == "openai":
+        ai_client = openai_client
+    elif payload.ai_model == "anthropic":
+        ai_client = anthropic_client
+    result = ai_client.generate_summary(payload.content)
+    return parse_summary_result(result)
+
 @router.post("/api/v1/news/search_news")
 async def search_news(request: PromptRequest):
     prompt = request.prompt
     news_list = []
-    keywords = airesponder.ai_respond(prompt,DesiredKeywords)
+    keywords = openai_client.extract_search_keywords(prompt)
     # Should change into simple factory pattern
     news_items = fetch_news_info(keywords, is_initial_fetch=False)
     for news_item in news_items:

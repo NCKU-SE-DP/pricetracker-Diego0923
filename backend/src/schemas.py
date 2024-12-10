@@ -49,3 +49,7 @@ class NewsUpvoteResponseSchema(BaseModel):
     用於回應的新聞文章點贊數據模式
     """
     message: str
+    
+class NewsSummaryCustomModelSchema(BaseModel):
+    content: str
+    ai_model: str

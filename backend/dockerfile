@@ -22,3 +22,5 @@ ENV VARIABLE_NAME="app"
 
 # 使用 uvicorn 運行 fastapi 應用
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
