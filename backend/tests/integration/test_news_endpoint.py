@@ -7,7 +7,7 @@ from jose import jwt
 from src.main import app
 from src.models import Base, NewsArticle, User, user_news_association_table
 from src.database import get_db
-from src.schemas import NewsSummaryRequestSchema, PromptRequest
+from src.schemas import NewsSummaryRequestSchema, NewsSummaryCustomModelSchema
 from src.routers.authenticate import password_context
 from unittest.mock import Mock
 from src.crawler.crawler_base import Headline
@@ -127,6 +127,11 @@ def mock_openai(mocker, return_content):
 
     return mock_openai_client
 
+def mock_anthropic(mocker, return_content):
+    mock_anthropic_client = mocker.patch('src.llm_client.anthropic_client.AnthropicClient._generate_text')
+    mock_anthropic_client.return_value = return_content
+
+    return mock_anthropic_client
 def test_search_news(mocker):
     mock_openai(mocker, "keywords")
     mock_headline = [Headline(title="", url="http://example.com/news1")]
@@ -170,31 +175,55 @@ def test_news_summary(mocker, test_token):
     assert json_response["summary"] == "test impact"
     assert json_response["reason"] == "test reason"
 
-def test_news_summary_custom_model_OpenAI(test_token):
-    payload = {
-        "content": testai,
-        "ai_model": "openai"
-    }
+def test_news_summary_with_custom_model(mocker, test_token):
     headers = {"Authorization": f"Bearer {test_token}"}
-    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
+    openai_response = json.dumps({"影響": "test OpenAI summary", "原因": "test OpenAI reason"})
+    mock_openai(mocker, openai_response)
+
+    request_body = NewsSummaryCustomModelSchema(content="Test news content", ai_model="openai")
+    response = client.post("/api/v1/news/news_summary_custom_model", json=request_body.dict(), headers=headers)
 
     assert response.status_code == 200
     json_response = response.json()
-    assert json_response["summary"] == "custom impact"
-    assert json_response["reason"] == "custom reason"
+    assert json_response["summary"] == "test OpenAI summary"
+    assert json_response["reason"] == "test OpenAI reason"
 
-def test_news_summary_custom_model_Anthropic(test_token):
-    payload = {
-        "content": testai,
-        "ai_model": "anthropic"
-    }
-    headers = {"Authorization": f"Bearer {test_token}"}
-    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
-
+    anthropic_response = json.dumps({"影響": "test Anthropic summary", "原因": "test Anthropic reason"})
+    mock_anthropic(mocker, anthropic_response)
+    request_body = NewsSummaryCustomModelSchema(content="Test news content", ai_model="anthropic")
+    response = client.post("/api/v1/news/news_summary_custom_model", json=request_body.dict(), headers=headers)
     assert response.status_code == 200
     json_response = response.json()
-    assert json_response["summary"] == "custom impact"
-    assert json_response["reason"] == "custom reason"
+    assert json_response["summary"] == "test Anthropic summary"
+    assert json_response["reason"] == "test Anthropic reason"
+
+#def test_news_summary_custom_model_OpenAI(test_token):
+#   payload = {
+#        "content": testai,
+#        "ai_model": "openai"
+#    }
+#    headers = {"Authorization": f"Bearer {test_token}"}
+#    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
+#
+#   assert response.status_code == 200
+#   json_response = response.json()
+#  assert "summary" in json_response
+#  assert json_response["summary"] != ""
+#
+#def test_news_summary_custom_model_anthropic(test_token):
+#    payload = {
+#        "content": testai,
+#        "ai_model": "anthropic" 
+#    }
+#    headers = {"Authorization": f"Bearer {test_token}"}
+#    response = client.post("/api/v1/news/news_summary_custom_model", json=payload, headers=headers)
+#    
+#    assert response.status_code == 200
+#    json_response = response.json()
+#    assert "summary" in json_response
+#    assert json_response["summary"] != ""
+
+
 def test_upvote_article(test_user_and_articles, test_token):
     user, articles = test_user_and_articles
     headers = {"Authorization": f"Bearer {test_token}"}

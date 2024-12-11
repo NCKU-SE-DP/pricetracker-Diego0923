@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from fastapi import APIRouter, HTTPException, Depends, Query
 from openai import OpenAI
 import json
-from ..config import OPENAI_API_KEY, ANTHROPIC_API_KEY
+from ..config import OPENAI_TOKEN, ANTHROPIC_TOKEN,OPENAI_AI_MODEL,ANTHROPIC_API_MODEL
 from ..database import get_db, SessionLocal
 from ..models import NewsArticle, User
 from ..schemas import PromptRequest, NewsSummaryRequestSchema, NewsSummaryCustomModelSchema
@@ -20,8 +20,8 @@ from src.llm_client.anthropic_client import AnthropicClient
 
 router = APIRouter()  
 crawler = UDNCrawler()
-openai_client = OpenAIClient(api_key=OPENAI_API_KEY)
-anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY)
+openai_client = OpenAIClient(api_key=OPENAI_TOKEN,model=OPENAI_AI_MODEL)
+anthropic_client = AnthropicClient(api_key=ANTHROPIC_TOKEN,model=ANTHROPIC_API_MODEL)
 
 def add_news_to_db(news_data):
     """
@@ -170,6 +170,7 @@ async def news_summary_custom_model(
     elif payload.ai_model == "anthropic":
         ai_client = anthropic_client
     result = ai_client.generate_summary(payload.content)
+    print("->", result, "<-")
     return parse_summary_result(result)
 
 @router.post("/api/v1/news/search_news")

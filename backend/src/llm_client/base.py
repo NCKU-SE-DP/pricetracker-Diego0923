@@ -14,9 +14,10 @@ class LLMClientBase(metaclass=abc.ABCMeta):
         """
         pass
 class LLMClientTemplate(abc.ABC):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str):
         self.api_key = api_key
         self.client = None
+        self.model = model
         self._initialize_client()
 
     @abc.abstractmethod

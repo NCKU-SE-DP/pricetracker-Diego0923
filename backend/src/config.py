@@ -13,11 +13,12 @@ SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", 1.0))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", 1.0))
 
 # OpenAI API 金鑰
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your_openai_api_key")  # 確保替換為您的 OpenAI API 金鑰
+OPENAI_TOKEN = os.getenv("OPENAI_TOKEN", "")  # 確保替換為您的 OpenAI API 金鑰
+OPENAI_AI_MODEL = os.getenv("OPENAI_AI_MODEL", "openai:gpt-4o")  # 確保替換為您的 OpenAI AI 模型
 
 # Anthropic API 金鑰
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "your_anthropic_api_key")  # 確保替換為您的 ANTHROPIC_API_KEY 金鑰
-
+ANTHROPIC_TOKEN = os.getenv("ANTHROPIC_TOKEN", "")  # 確保替換為您的 ANTHROPIC_API_KEY 金鑰
+ANTHROPIC_API_MODEL = os.getenv("ANTHROPIC_API_MODEL", "anthropic:claude-3-5-sonnet-20240620")  # 確保替換為您的 ANTHROPIC_API_MODEL 模型
 # 背景任務排程間隔
 DEFAULT_SCHEDULER_INTERVAL_MINUTES = int(os.getenv("DEFAULT_SCHEDULER_INTERVAL_MINUTES", 100))
 
