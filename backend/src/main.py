@@ -11,7 +11,7 @@ from .config import (
 )
 from .database import Base, engine, get_db, SessionLocal
 from .routers import authenticate, news, price
-from .service import fetch_and_store_news
+from src.routers.news import fetch_and_store_news
 from sqlalchemy.orm import Session
 from .models import NewsArticle
 

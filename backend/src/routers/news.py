@@ -6,18 +6,45 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from openai import OpenAI
 import json
 from ..config import OPENAI_API_KEY, DEFAULT_SCHEDULER_INTERVAL_MINUTES
-from ..database import get_db
+from ..database import get_db, SessionLocal
 from ..models import NewsArticle, User
 from ..schemas import PromptRequest, NewsSummaryRequestSchema
 from sqlalchemy.orm import Session
-from ..service import add_news_to_db, get_news_article_upvote_details
+from ..service import get_news_article_upvote_details
 from ..dependence import authenticate_user_token
 from ..service import toggle_news_article_upvote, fetch_news_info
+from src.crawler.udn_crawler import UDNCrawler
+import itertools
 
-router = APIRouter(
-    prefix="/api/v1/news"
-)  
-@router.post("/{id}/upvote")
+router = APIRouter()  
+crawler = UDNCrawler()
+
+def add_news_to_db(news_data):
+    """
+    將新聞資料添加到資料庫中
+    """
+    crawler.save(news=news_data, db=SessionLocal())
+def fetch_and_store_news(is_initial_fetch=False):
+    """
+    get new info
+
+    :param is_initial_fetch:
+    :return:
+    """
+    news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
+    for news in news_data:
+        title = news["title"]
+        relevance_score = ai_respond(title,"你是一個關聯度評估機器人，請評估新聞標題是否與「民生用品的價格變化」相關，並給予'high'、'medium'、'low'評價。(僅需回答'high'、'medium'、'low'三個詞之一)")
+        if relevance_score == "high":
+            detailed_news = process_news_item(news)
+            summary_result = ai_respond(" ".join(detailed_news["content"]),"你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})")
+            if summary_result:
+                summary_result = json.loads(summary_result)
+                detailed_news["summary"] = summary_result["影響"]
+                detailed_news["reason"] = summary_result["原因"]
+            add_news_to_db(detailed_news)
+
+@router.post("/api/v1/news/{id}/upvote")
 def handle_news_article_upvote(
         id,
         db=Depends(get_db),
@@ -26,7 +53,7 @@ def handle_news_article_upvote(
     message = toggle_news_article_upvote(id, current_user.id, db)
     return {"message": message}
 
-@router.get("/user_news")
+@router.get("/api/v1/news/user_news")
 def get_user_specific_news(
         db=Depends(get_db),
         u=Depends(authenticate_user_token)
@@ -44,7 +71,7 @@ def get_user_specific_news(
         )
     return result
 
-@router.get("/news")
+@router.get("/api/v1/news/news")
 def get_user_specific_news(
     db: Session = Depends(get_db)
 ):
@@ -64,27 +91,10 @@ def get_user_specific_news(
         )
     return user_specific_articles
 
-@router.post("/news_summary")
-async def news_summary(
-    payload: NewsSummaryRequestSchema, current_user: User = Depends(authenticate_user_token)
-):
-    """
-    生成新聞摘要
-    """
+@router.post("/api/v1/news/news_summary")
+async def news_summary(payload: NewsSummaryRequestSchema, current_user: User = Depends(authenticate_user_token)):
     response = {}
-    message_payload = [
-        {
-            "role": "system",
-            "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
-        },
-        {"role": "user", "content": f"{payload.content}"},
-    ]
-
-    completion = OpenAI(api_key=OPENAI_API_KEY).chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=message_payload,
-    )
-    result = completion.choices[0].message.content
+    result = ai_respond(payload.content,"你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})")
     if result:
         result = json.loads(result)
         response["summary"] = result["影響"]
@@ -92,53 +102,80 @@ async def news_summary(
     return response
 
 _id_counter = itertools.count(start=1000000)
+def process_news_item(news):
+    """
+    Fetches detailed content from a news article.
+    """
+    response = requests.get(news["titleLink"])
+    soup = BeautifulSoup(response.text, "html.parser")
+    # 標題
+    title = soup.find("h1", class_="article-content__title").text
+    time = soup.find("time", class_="article-content__time").text
+    # 定位到包含文章内容的 <section>
+    content_section = soup.find("section", class_="article-content__editor")
 
-@router.post("/search_news")
-async def search_news(request: PromptRequest):
-    """
-    提取關鍵字並獲取新聞資料
-    """
-    prompt = request.prompt
-    news_list = []
-    keyword_extraction_messages = [
+    paragraphs = [
+        p.text
+        for p in content_section.find_all("p")
+        if p.text.strip() != "" and "▪" not in p.text
+    ]
+    detailed_news = {
+        "url": news["titleLink"],
+        "title": title,
+        "time": time,
+        "content": paragraphs,
+    }
+
+    return detailed_news
+def ai_respond(content, words):
+    keyword_messages = [
         {
             "role": "system",
-            "content": "你是一個關鍵字提取機器人，用戶將會輸入一段文字，表示其希望看見的新聞內容，請提取出用戶希望看見的關鍵字，請截取最重要的關鍵字即可，避免出現「新聞」、「資訊」等混淆搜尋引擎的字詞。(僅須回答關鍵字，若有多個關鍵字，請以空格分隔)",
+            "content": words,
         },
-        {"role": "user", "content": f"{prompt}"},
+        {"role": "user", "content": f"{content}"},
     ]
-
     completion = OpenAI(api_key="xxx").chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=keyword_extraction_messages,
+        messages=keyword_messages,
     )
-    extracted_keywords = completion.choices[0].message.content
+    return completion.choices[0].message.content
+def news_elements(news):
+    return {
+        "url": news.url,
+        "title": news.title,
+        "time": news.time,
+        "content": news.content,
+    }
+
+def parse_summary_result(result):
+    """
+    Parses the summary result JSON and extracts 'summary' and 'reason'.
+
+    :param result: The JSON-formatted summary result string.
+    :return: A dictionary with keys 'summary' and 'reason', or an empty dictionary if parsing fails.
+    """
+    response_data = {}
+    if result:
+        try:
+            result = json.loads(result)
+            response_data["summary"] = result["影響"]
+            response_data["reason"] = result["原因"]
+        except json.JSONDecodeError:
+            return response_data
+    return response_data
+@router.post("/api/v1/news/search_news")
+async def search_news(request: PromptRequest):
+    prompt = request.prompt
+    news_list = []
+    keywords = ai_respond(prompt,"你是一個關鍵字提取機器人，用戶將會輸入一段文字，表示其希望看見的新聞內容，請提取出用戶希望看見的關鍵字，請截取最重要的關鍵字即可，避免出現「新聞」、「資訊」等混淆搜尋引擎的字詞。(僅須回答關鍵字，若有多個關鍵字，請以空格分隔)")
     # Should change into simple factory pattern
-    news_items = fetch_news_info(extracted_keywords, is_initial_fetch=False)
+    news_items = fetch_news_info(keywords, is_initial_fetch=False)
     for news_item in news_items:
         try:
-            response = requests.get(news_item["titleLink"])
-            soup = BeautifulSoup(response.text, "html.parser")
-            # Title
-            article_title = soup.find("h1", class_="article-content__title").text
-            article_time = soup.find("time", class_="article-content__time").text
-            # Locate the <section> containing article content
-            content_section = soup.find("section", class_="article-content__editor")
-
-            article_paragraphs = [
-                p.text
-                for p in content_section.find_all("p")
-                if p.text.strip() != "" and "▪" not in p.text
-            ]
-            article_details = {
-                "url": news_item["titleLink"],
-                "title": article_title,
-                "time": article_time,
-                "content": article_paragraphs,
-            }
-            article_details["content"] = " ".join(article_details["content"])
-            article_details["id"] = next(_id_counter)
-            news_list.append(article_details)
+            detailed_news = news_elements(crawler.parse(news_item.url))
+            detailed_news["id"] = next(_id_counter)
+            news_list.append(detailed_news)
         except Exception as e:
             print(e)
     return sorted(news_list, key=lambda x: x["time"], reverse=True)
