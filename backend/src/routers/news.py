@@ -4,7 +4,7 @@ import os
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends
 import json
-from ..config import OPENAI_TOKEN, ANTHROPIC_TOKEN,OPENAI_AI_MODEL,ANTHROPIC_API_MODEL
+from ..config import OPENAI_API_KEY, ANTHROPIC_API_KEY,OPENAI_MODEL,ANTHROPIC_MODEL
 from ..database import get_db, SessionLocal
 from ..models import NewsArticle
 from ..schemas import PromptRequest, NewsSummaryRequestSchema, NewsSummaryCustomModelSchema
@@ -22,8 +22,8 @@ from src.llm_client.base import RelevanceEvaluation
 _id_counter = itertools.count(start=1000000)
 router = APIRouter()  
 crawler = UDNCrawler()
-openai_client = OpenAIClient(api_key=os.getenv("OPENAI_API_KEY"),model=OPENAI_AI_MODEL)
-anthropic_client = AnthropicClient(api_key=os.getenv("ANTHROPIC_API_KEY"),model=ANTHROPIC_API_MODEL)
+openai_client = OpenAIClient(api_key=OPENAI_API_KEY,model=OPENAI_MODEL)
+anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY,model=ANTHROPIC_MODEL)
 
 #checked
 @router.post("/api/v1/news/{id}/upvote")

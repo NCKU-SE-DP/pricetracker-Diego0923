@@ -16,7 +16,6 @@ from src.routers.news import fetch_and_store_news
 from sqlalchemy.orm import Session
 from .models import NewsArticle
 
-dotenv.load_dotenv(override=True)
 
 # 初始化 Sentry，用於錯誤追蹤和性能監控
 sentry_sdk.init(
