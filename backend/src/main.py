@@ -15,6 +15,8 @@ from src.routers.news import fetch_and_store_news
 from sqlalchemy.orm import Session
 from .models import NewsArticle
 import logging
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,3 +87,18 @@ def shutdown_scheduler():
 app.include_router(user.router)
 app.include_router(news.router)
 app.include_router(price.router)
+
+# Custom exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Handle unexpected exceptions and return a JSON response with error details.
+    """
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "message": "An unexpected error occurred. Please try again later.",
+            "details": str(exc)
+        },
+    )
