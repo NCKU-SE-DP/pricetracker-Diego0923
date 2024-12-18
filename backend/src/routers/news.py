@@ -152,6 +152,7 @@ def fetch_and_store_news(is_initial=False):
             )
             add_news_to_db(detailed_news)
 
+
 def fetch_news_info(search_term, is_initial_fetch=False):
     return crawler.get_headline(search_term, (1, 10) if is_initial_fetch else 1)
     
