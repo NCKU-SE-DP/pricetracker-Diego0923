@@ -35,7 +35,7 @@ UDNCrawler Methods:
 from requests import get, Response
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
-
+from src.models import NewsArticle
 from src.crawler.crawler_base import NewsCrawlerBase, Headline, News, NewsWithSummary
 from src.crawler.exceptions import DomainMismatchException
 
@@ -122,10 +122,15 @@ class UDNCrawler(NewsCrawlerBase):
         return News(title=title, url=url, time=time, content=content)
 
     def save(self, news: NewsWithSummary, db: Session):
-        existing_news = db.query(NewsWithSummary).filter_by(url=news.url).first()
-        if not existing_news:
-            db.add(news)
-            self._commit_changes(db)
+        db.add(NewsArticle(
+            url=news.url,
+            title=news.title,
+            time=news.time,
+            content=" ".join(news.content),  # 將內容list轉換為字串
+            summary=news.summary,
+            reason=news.reason,
+        ))
+        self._commit_changes(db)
 
     @staticmethod
     def _commit_changes(db: Session):
