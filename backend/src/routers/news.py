@@ -1,71 +1,50 @@
 import requests
 import itertools
-from typing import Optional
+import os
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException, Depends, Query
-from openai import OpenAI
+from fastapi import APIRouter, Depends
 import json
 from ..config import OPENAI_TOKEN, ANTHROPIC_TOKEN,OPENAI_AI_MODEL,ANTHROPIC_API_MODEL
 from ..database import get_db, SessionLocal
-from ..models import NewsArticle, User
+from ..models import NewsArticle
 from ..schemas import PromptRequest, NewsSummaryRequestSchema, NewsSummaryCustomModelSchema
 from sqlalchemy.orm import Session
 from ..service import get_news_article_upvote_details
 from ..dependence import authenticate_user_token
-from ..service import toggle_news_article_upvote, fetch_news_info
+from ..service import toggle_news_article_upvote
 from src.crawler.udn_crawler import UDNCrawler
+from src.crawler.crawler_base import NewsWithSummary
 import itertools
 from src.llm_client.openai_client import OpenAIClient
 from src.llm_client.anthropic_client import AnthropicClient
+from src.llm_client.base import RelevanceEvaluation
 
+_id_counter = itertools.count(start=1000000)
 router = APIRouter()  
 crawler = UDNCrawler()
-openai_client = OpenAIClient(api_key=OPENAI_TOKEN,model=OPENAI_AI_MODEL)
-anthropic_client = AnthropicClient(api_key=ANTHROPIC_TOKEN,model=ANTHROPIC_API_MODEL)
+openai_client = OpenAIClient(api_key=os.getenv("OPENAI_API_KEY"),model=OPENAI_AI_MODEL)
+anthropic_client = AnthropicClient(api_key=os.getenv("ANTHROPIC_API_KEY"),model=ANTHROPIC_API_MODEL)
 
-def add_news_to_db(news_data):
-    """
-    將新聞資料添加到資料庫中
-    """
-    crawler.save(news=news_data, db=SessionLocal())
-def fetch_and_store_news(is_initial_fetch=False):
-    """
-    get new info
-
-    :param is_initial_fetch:
-    :return:
-    """
-    news_data = fetch_news_info("價格", is_initial_fetch=is_initial_fetch)
-    for news in news_data:
-        title = news["title"]
-        relevance_score = openai_client.evaluate_relevance(title)
-        if relevance_score == "high":
-            detailed_news = process_news_item(news)
-            summary_result = openai_client.generate_summary(" ".join(detailed_news["content"]))
-            if summary_result:
-                summary_result = json.loads(summary_result)
-                detailed_news["summary"] = summary_result["影響"]
-                detailed_news["reason"] = summary_result["原因"]
-            add_news_to_db(detailed_news)
-
+#checked
 @router.post("/api/v1/news/{id}/upvote")
 def handle_news_article_upvote(
         id,
         db=Depends(get_db),
-        current_user=Depends(authenticate_user_token),
+        user=Depends(authenticate_user_token),
 ):
-    message = toggle_news_article_upvote(id, current_user.id, db)
+    message = toggle_news_article_upvote(id, user.id, db)
     return {"message": message}
 
+#checked
 @router.get("/api/v1/news/user_news")
 def get_user_specific_news(
         db=Depends(get_db),
-        u=Depends(authenticate_user_token)
+        username=Depends(authenticate_user_token)
 ):
     news = db.query(NewsArticle).order_by(NewsArticle.time.desc()).all()
     result = []
     for article in news:
-        upvotes, upvoted = get_news_article_upvote_details(article.id, u.id, db)
+        upvotes, upvoted = get_news_article_upvote_details(article.id, username.id, db)
         result.append(
             {
                 **article.__dict__,
@@ -74,7 +53,7 @@ def get_user_specific_news(
             }
         )
     return result
-
+#checked
 @router.get("/api/v1/news/news")
 def get_user_specific_news(
     db: Session = Depends(get_db)
@@ -95,8 +74,9 @@ def get_user_specific_news(
         )
     return user_specific_articles
 
+#checked
 @router.post("/api/v1/news/news_summary")
-async def news_summary(payload: NewsSummaryRequestSchema, current_user: User = Depends(authenticate_user_token)):
+async def news_summary(payload: NewsSummaryRequestSchema, user = Depends(authenticate_user_token)):
     response = {}
     result = openai_client.generate_summary(payload.content)
     if result:
@@ -105,7 +85,76 @@ async def news_summary(payload: NewsSummaryRequestSchema, current_user: User = D
         response["reason"] = result["原因"]
     return response
 
-_id_counter = itertools.count(start=1000000)
+@router.post("/api/v1/news/news_summary_custom_model")
+async def news_summary_custom_model(
+        payload: NewsSummaryCustomModelSchema, 
+        u=Depends(authenticate_user_token)
+):
+    """
+    Get summary of the news article using a custom AI model (OpenAI or Anthropic).
+    """
+    if payload.ai_model == "openai":
+        ai_client = openai_client
+    elif payload.ai_model == "anthropic":
+        ai_client = anthropic_client
+    result = ai_client.generate_summary(payload.content)
+    print("->", result, "<-")
+    return parse_summary_result(result)
+
+#checked
+@router.post("/api/v1/news/search_news")
+async def search_news(request: PromptRequest):
+    prompt = request.prompt
+    news_list = []
+    keywords = openai_client.extract_search_keywords(prompt)
+    # Should change into simple factory pattern
+    news_items = fetch_news_info(keywords, is_initial_fetch=False)
+    for news_item in news_items:
+        try:
+            detailed_news = news_elements(crawler.parse(news_item.url))
+            detailed_news["id"] = next(_id_counter)
+            news_list.append(detailed_news)
+        except Exception as e:
+            print(e)
+    return sorted(news_list, key=lambda x: x["time"], reverse=True)
+
+def add_news_to_db(news_data):
+    """
+    將新聞資料添加到資料庫中
+    """
+    crawler.save(news_data, Session())
+
+def fetch_and_store_news(is_initial=False):
+    """
+    get new info
+
+    :param is_initial:
+    :return:
+    """
+    news_data = fetch_news_info("價格", is_initial)
+    for news in news_data:
+        title = news.title
+        relevance = openai_client.evaluate_relevance(title)
+        if relevance == RelevanceEvaluation.HIGH:
+            detailed_news = crawler.validate_and_parse(news.url)
+
+            if detailed_news is None:
+                continue
+
+            result = openai_client.generate_summary(" ".join(detailed_news.content))
+            detailed_news = NewsWithSummary(
+                url=detailed_news.url,
+                title=detailed_news.title,
+                time=detailed_news.time,
+                content=detailed_news.content,
+                summary=result["影響"],
+                reason=result["原因"],
+            )
+            add_news_to_db(detailed_news)
+
+def fetch_news_info(search_term, is_initial_fetch=False):
+    return crawler.get_headline(search_term, (1, 10) if is_initial_fetch else 1)
+    
 def process_news_item(news):
     """
     Fetches detailed content from a news article.
@@ -157,34 +206,5 @@ def parse_summary_result(result):
             return response_data
     return response_data
 
-@router.post("/api/v1/news/news_summary_custom_model")
-async def news_summary_custom_model(
-        payload: NewsSummaryCustomModelSchema, 
-        u=Depends(authenticate_user_token)
-):
-    """
-    Get summary of the news article using a custom AI model (OpenAI or Anthropic).
-    """
-    if payload.ai_model == "openai":
-        ai_client = openai_client
-    elif payload.ai_model == "anthropic":
-        ai_client = anthropic_client
-    result = ai_client.generate_summary(payload.content)
-    print("->", result, "<-")
-    return parse_summary_result(result)
-
-@router.post("/api/v1/news/search_news")
-async def search_news(request: PromptRequest):
-    prompt = request.prompt
-    news_list = []
-    keywords = openai_client.extract_search_keywords(prompt)
-    # Should change into simple factory pattern
-    news_items = fetch_news_info(keywords, is_initial_fetch=False)
-    for news_item in news_items:
-        try:
-            detailed_news = news_elements(crawler.parse(news_item.url))
-            detailed_news["id"] = next(_id_counter)
-            news_list.append(detailed_news)
-        except Exception as e:
-            print(e)
-    return sorted(news_list, key=lambda x: x["time"], reverse=True)
+def news_exists(news_id, db: Session):
+    return db.query(NewsArticle).filter_by(id=news_id).first() is not None

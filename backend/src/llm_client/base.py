@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict
 import aisuite as ai
 from src.config import newsImpactAndCause, DesiredKeywords, PriceChangeRelevance
+from enum import Enum
 class LLMClientBase(metaclass=abc.ABCMeta):    
     @staticmethod
     @abc.abstractmethod
@@ -13,6 +14,12 @@ class LLMClientBase(metaclass=abc.ABCMeta):
         :return: The text response from the LLM.
         """
         pass
+
+class RelevanceEvaluation(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
 class LLMClientTemplate(abc.ABC):
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key

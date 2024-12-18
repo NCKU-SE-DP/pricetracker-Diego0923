@@ -132,12 +132,15 @@ def mock_anthropic(mocker, return_content):
     mock_anthropic_client.return_value = return_content
 
     return mock_anthropic_client
+
 def test_search_news(mocker):
     mock_openai(mocker, "keywords")
-    mock_headline = [Headline(title="", url="http://example.com/news1")]
-    mock_get_new_info = mocker.patch("src.routers.news.fetch_news_info", return_value=mock_headline)
     
-    mock_get = mocker.patch("src.crawler.udn_crawler.requests.get", return_value=mocker.Mock(
+    mock_get_new_info = mocker.patch("src.routers.news.fetch_news_info", return_value=[
+        Headline(title="Test Title", url="https://udn.com/api/more/testing/news1")
+    ])
+
+    mock_get = mocker.patch("src.crawler.udn_crawler.get", return_value=mocker.Mock(
         text="""
         <html>
         <h1 class="article-content__title">Test Title</h1>

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 import sentry_sdk
 from .config import (
@@ -10,10 +11,12 @@ from .config import (
     CORS_ALLOW_ORIGINS
 )
 from .database import Base, engine, get_db, SessionLocal
-from .routers import authenticate, news, price
+from .routers import user, news, price
 from src.routers.news import fetch_and_store_news
 from sqlalchemy.orm import Session
 from .models import NewsArticle
+
+dotenv.load_dotenv(override=True)
 
 # 初始化 Sentry，用於錯誤追蹤和性能監控
 sentry_sdk.init(
@@ -66,6 +69,6 @@ def shutdown_scheduler():
     background_scheduler.shutdown()
 
 # 包含路由模組
-app.include_router(authenticate.router)
+app.include_router(user.router)
 app.include_router(news.router)
 app.include_router(price.router)
