@@ -12,9 +12,4 @@ async def get_necessities_prices(
     return requests.get(
         "https://opendata.ey.gov.tw/api/ConsumerProtection/NecessitiesPrice",
         params={"CategoryName": category, "Name": commodity},
-    ).json() 
-    """
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Failed to fetch necessities prices")
-    return response.json()
-    """
+    ).json()    

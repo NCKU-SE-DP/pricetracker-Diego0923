@@ -14,11 +14,6 @@ crawler = UDNCrawler()
 # 設定密碼加密上下文
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    驗證用戶輸入的密碼是否與儲存的加密密碼匹配
-    """
-    return password_context.verify(plain_password, hashed_password)
 
 def hash_password(password: str) -> str:
     """
@@ -26,24 +21,6 @@ def hash_password(password: str) -> str:
     """
     return password_context.hash(password)
 
-def create_access_token(data, expires_delta=None):
-    """create access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=DEFAULT_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    print(to_encode)
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm="HS256")
-    return encoded_jwt
-
-def fetch_news_info(search_term, is_initial_fetch=False):
-    if is_initial_fetch:
-        return crawler.startup(search_term=search_term)
-    else:
-        return crawler.get_headline(search_term=search_term, page=1)
-    
 def get_news_article_upvote_details(article_id, uid, db):
     cnt = (
         db.query(user_news_association_table)
@@ -98,5 +75,3 @@ def get_all_news_articles(db=Depends(get_db)):
             {**article.__dict__, "upvotes": upvotes, "is_upvoted": upvoted}
         )
     return formatted_articles
-def news_exists(id2, db: Session):
-    return db.query(NewsArticle).filter_by(id=id2).first() is not None

@@ -27,7 +27,6 @@ class User(Base):
         back_populates="upvoted_by_users",
     )
 
-
 class NewsArticle(Base):
     """
     新聞文章模型，表示應用中的新聞內容。

@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 將當前目錄複製到容器内的工作目錄
 COPY . .
-
 # 開啟端口
 EXPOSE 8000
 
