@@ -32,6 +32,7 @@ crawler = UDNCrawler()
 openai_client = OpenAIClient(api_key=OPENAI_API_KEY,model=OPENAI_MODEL)
 anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY,model=ANTHROPIC_MODEL)
 
+#checked
 @router.post("/api/v1/news/{id}/upvote")
 def handle_news_article_upvote(
         id,
@@ -45,6 +46,8 @@ def handle_news_article_upvote(
         logger.error(f"Error in handle_news_article_upvote for news ID {id}: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+
+#checked
 @router.get("/api/v1/news/user_news")
 def get_user_specific_news(
         db=Depends(get_db),
@@ -91,6 +94,7 @@ def get_user_specific_news(
         logger.error(f"Error in get_user_specific_news: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+#checked
 @router.post("/api/v1/news/news_summary")
 async def news_summary(payload: NewsSummaryRequestSchema, user = Depends(authenticate_user_token)):
     try:
@@ -104,6 +108,7 @@ async def news_summary(payload: NewsSummaryRequestSchema, user = Depends(authent
     except Exception as e:
         logger.error(f"Error in news_summary: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 @router.post("/api/v1/news/news_summary_custom_model")
 async def news_summary_custom_model(
@@ -144,6 +149,7 @@ async def search_news(request: PromptRequest):
     except Exception as e:
         logger.error(f"Error in search_news: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 def add_news_to_db(news_data):
     """

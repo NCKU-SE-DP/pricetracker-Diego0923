@@ -28,6 +28,7 @@ def register_user(user: UserAuthSchema, db: Session = Depends(get_db)):
         logger.error(f"Error occurred while registering user: {user.username}. Error: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
+
 @router.post("/api/v1/users/login")
 async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
