@@ -32,7 +32,6 @@ crawler = UDNCrawler()
 openai_client = OpenAIClient(api_key=OPENAI_API_KEY,model=OPENAI_MODEL)
 anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY,model=ANTHROPIC_MODEL)
 
-
 @router.post("/api/v1/news/{id}/upvote")
 def handle_news_article_upvote(
         id,
