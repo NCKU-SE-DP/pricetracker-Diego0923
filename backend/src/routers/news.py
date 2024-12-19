@@ -131,6 +131,7 @@ def fetch_and_store_news(is_initial=False):
     :param is_initial:
     :return:
     """
+    
     news_data = fetch_news_info("價格", is_initial)
     for news in news_data:
         title = news.title
