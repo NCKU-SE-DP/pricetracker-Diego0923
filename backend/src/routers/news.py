@@ -128,13 +128,7 @@ async def news_summary_custom_model(
 async def search_news(request: PromptRequest):
     prompt = request.prompt
     news_list = []
-
-    try:
-        keywords = openai_client.extract_search_keywords(prompt)
-    except Exception as e:
-        logger.error(f"Error extracting search keywords: {e}")
-        raise HTTPException(status_code=500, detail="Error extracting search keywords")
-
+    keywords = openai_client.extract_search_keywords(prompt)
     try:
         news_items = fetch_news_info(keywords, is_initial_fetch=False)
     except Exception as e:
@@ -148,7 +142,7 @@ async def search_news(request: PromptRequest):
             news_list.append(detailed_news)
         except Exception as e:
             logger.warning(f"Error parsing news item {news_item.url}: {e}")
-            
+
     sorted_news_list = sorted(news_list, key=lambda x: x["time"], reverse=True)
 
     return sorted_news_list
@@ -170,18 +164,9 @@ def fetch_and_store_news(is_initial=False):
     :param is_initial:
     :return:
     """
-    try:
-        news_data = fetch_news_info("價格", is_initial)
-    except Exception as e:
-        logger.error(f"Error fetching news info: {e}")
-        raise
-
+    news_data = fetch_news_info("價格", is_initial)
     for news in news_data:
-        try:
-            relevance = openai_client.evaluate_relevance(news.title)  # 評估相關性
-        except Exception as e:
-            logger.error(f"Error evaluating relevance for news: {e}")
-            continue
+        relevance = openai_client.evaluate_relevance(news.title)  # 評估相關性
 
         if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
             try:
@@ -193,16 +178,8 @@ def fetch_and_store_news(is_initial=False):
             if detailed_news is None:  # 如果詳細新聞為空
                 continue  # 跳過
 
-            try:
-                result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
-            except Exception as e:
-                logger.error(f"Error generating summary: {e}")
-                continue
-            try:
-                result = json.loads(result)
-            except Exception as e:
-                logger.error(f"Error parsing summary: {e}")
-                continue
+            result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
+            result = json.loads(result)
             try:
                 detailed_news = NewsWithSummary(
                     url=detailed_news.url,
@@ -289,3 +266,37 @@ def news_exists(news_id, db: Session):
     except Exception as e:
         logger.error(f"Error in news_exists check for news ID {news_id}: {e}")
         raise
+
+#def fetch_and_store_news(is_initial=False):
+    """
+    get new info
+
+    :param is_initial:
+    :return:
+    """
+    try:
+        news_data = fetch_news_info("價格", is_initial)
+        for news in news_data:
+            title = news.title  
+            relevance = openai_client.evaluate_relevance(title)  # 評估相關性
+            if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
+                detailed_news = crawler.validate_and_parse(news.url)  # 驗證並解析新聞網址
+
+                if detailed_news is None:  # 如果詳細新聞為空
+                    continue  # 跳過
+
+                result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
+                result = json.loads(result) 
+                detailed_news = NewsWithSummary(
+                    url=detailed_news.url,  
+                    title=detailed_news.title,  
+                    time=detailed_news.time,  
+                    content=detailed_news.content,  
+                    summary=result["影響"],  
+                    reason=result["原因"],  
+                )
+                add_news_to_db(detailed_news)  # 將新聞添加到數據庫
+    except Exception as e:
+        logger.error(f"Error in fetch_and_store_news: {e}")
+        raise
+請幫我修改成一個try只包含一個功能
