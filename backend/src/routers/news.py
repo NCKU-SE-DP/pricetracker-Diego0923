@@ -119,7 +119,6 @@ async def news_summary_custom_model(
         elif payload.ai_model == "anthropic":
             ai_client = anthropic_client
         result = ai_client.generate_summary(payload.content)
-        print("->", result, "<-")
         return parse_summary_result(result)
     except Exception as e:
         logger.error(f"Error in news_summary_custom_model: {e}")
@@ -127,23 +126,36 @@ async def news_summary_custom_model(
 
 @router.post("/api/v1/news/search_news")
 async def search_news(request: PromptRequest):
+    prompt = request.prompt
+    news_list = []
+
     try:
-        prompt = request.prompt
-        news_list = []
         keywords = openai_client.extract_search_keywords(prompt)
-        # Should change into simple factory pattern
-        news_items = fetch_news_info(keywords, is_initial_fetch=False)
-        for news_item in news_items:
-            try:
-                detailed_news = news_elements(crawler.parse(news_item.url))
-                detailed_news["id"] = next(_id_counter)
-                news_list.append(detailed_news)
-            except Exception as e:
-                logger.warning(f"Error parsing news item {news_item.url}: {e}")
-        return sorted(news_list, key=lambda x: x["time"], reverse=True)
     except Exception as e:
-        logger.error(f"Error in search_news: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"Error extracting search keywords: {e}")
+        raise HTTPException(status_code=500, detail="Error extracting search keywords")
+
+    try:
+        news_items = fetch_news_info(keywords, is_initial_fetch=False)
+    except Exception as e:
+        logger.error(f"Error fetching news info: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching news info")
+
+    for news_item in news_items:
+        try:
+            detailed_news = news_elements(crawler.parse(news_item.url))
+            detailed_news["id"] = next(_id_counter)
+            news_list.append(detailed_news)
+        except Exception as e:
+            logger.warning(f"Error parsing news item {news_item.url}: {e}")
+
+    try:
+        sorted_news_list = sorted(news_list, key=lambda x: x["time"], reverse=True)
+    except Exception as e:
+        logger.error(f"Error sorting news list: {e}")
+        raise HTTPException(status_code=500, detail="Error sorting news list")
+
+    return sorted_news_list
 
 def add_news_to_db(news_data):
     """
