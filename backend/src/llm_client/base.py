@@ -4,6 +4,13 @@ from typing import List, Dict
 import aisuite as ai
 from src.config import newsImpactAndCause, DesiredKeywords, PriceChangeRelevance
 from enum import Enum
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 class LLMClientBase(metaclass=abc.ABCMeta):    
     @staticmethod
     @abc.abstractmethod
@@ -32,14 +39,19 @@ class LLMClientTemplate(abc.ABC):
         pass
 
     def generate_summary(self, content):
-        keyword_messages = [
-        {
-            "role": "system",
-            "content": newsImpactAndCause,
-        },
-        {"role": "user", "content": f"{content}"},
-        ]
-        return self._generate_text(messages=keyword_messages)
+        try:
+            keyword_messages = [
+            {
+                "role": "system",
+                "content": newsImpactAndCause,
+            },
+            {"role": "user", "content": f"{content}"},
+            ]
+            return self._generate_text(messages=keyword_messages)
+        except Exception as e:
+            logger.error(f"Error generating summary for content: {content}, Error: {e}")
+            raise
+
     def extract_search_keywords(self, content):
         keyword_messages = [
         {
