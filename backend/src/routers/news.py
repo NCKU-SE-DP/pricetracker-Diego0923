@@ -148,12 +148,8 @@ async def search_news(request: PromptRequest):
             news_list.append(detailed_news)
         except Exception as e:
             logger.warning(f"Error parsing news item {news_item.url}: {e}")
-
-    try:
-        sorted_news_list = sorted(news_list, key=lambda x: x["time"], reverse=True)
-    except Exception as e:
-        logger.error(f"Error sorting news list: {e}")
-        raise HTTPException(status_code=500, detail="Error sorting news list")
+            
+    sorted_news_list = sorted(news_list, key=lambda x: x["time"], reverse=True)
 
     return sorted_news_list
 
