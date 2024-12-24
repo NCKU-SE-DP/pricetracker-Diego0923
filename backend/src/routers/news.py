@@ -205,31 +205,33 @@ def process_news_item(news):
     """
     Fetches detailed content from a news article.
     """
+    response = requests.get(news["titleLink"])
+    soup = BeautifulSoup(response.text, "html.parser")
+    # 標題
+    title = soup.find("h1", class_="article-content__title").text
+    time = soup.find("time", class_="article-content__time").text
+    # 定位到包含文章内容的 <section>
     try:
-        response = requests.get(news["titleLink"])
-        soup = BeautifulSoup(response.text, "html.parser")
-        # 標題
-        title = soup.find("h1", class_="article-content__title").text
-        time = soup.find("time", class_="article-content__time").text
-        # 定位到包含文章内容的 <section>
         content_section = soup.find("section", class_="article-content__editor")
-
+        if not content_section:
+            logger.error(f"No content section found for news {news.get('titleLink', 'unknown')}")
+            raise ValueError("Content section is missing")
         paragraphs = [
             p.text
             for p in content_section.find_all("p")
             if p.text.strip() != "" and "•" not in p.text
         ]
-        detailed_news = {
-            "url": news["titleLink"],
-            "title": title,
-            "time": time,
-            "content": paragraphs,
-        }
-
-        return detailed_news
     except Exception as e:
-        logger.error(f"Error in process_news_item for news {news.get('titleLink', 'unknown')}: {e}")
+        logger.error(f"Error extracting content for news {news.get('titleLink', 'unknown')}: {e}")
         raise
+
+    detailed_news = {
+        "url": news["titleLink"],
+        "title": title,
+        "time": time,
+        "content": paragraphs,
+    }
+    return detailed_news
 
 def news_elements(news):
     try:
