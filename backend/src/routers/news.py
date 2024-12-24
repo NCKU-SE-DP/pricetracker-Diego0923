@@ -176,29 +176,50 @@ def fetch_and_store_news(is_initial=False):
     """
     try:
         news_data = fetch_news_info("價格", is_initial)
-        for news in news_data:
-            title = news.title  
-            relevance = openai_client.evaluate_relevance(title)  # 評估相關性
-            if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
+    except Exception as e:
+        logger.error(f"Error fetching news info: {e}")
+        raise
+
+    for news in news_data:
+        try:
+            relevance = openai_client.evaluate_relevance(news.title)  # 評估相關性
+        except Exception as e:
+            logger.error(f"Error evaluating relevance for news: {e}")
+            continue
+
+        if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
+            try:
                 detailed_news = crawler.validate_and_parse(news.url)  # 驗證並解析新聞網址
+            except Exception as e:
+                logger.error(f"Error validating and parsing news URL: {e}")
+                continue
 
-                if detailed_news is None:  # 如果詳細新聞為空
-                    continue  # 跳過
+            if detailed_news is None:  # 如果詳細新聞為空
+                continue  # 跳過
 
+            try:
                 result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
-                result = json.loads(result) 
+            except Exception as e:
+                logger.error(f"Error generating summary: {e}")
+                continue
+            try:
+                result = json.loads(result)
+            except Exception as e:
+                logger.error(f"Error parsing summary: {e}")
+                continue
+            try:
                 detailed_news = NewsWithSummary(
-                    url=detailed_news.url,  
-                    title=detailed_news.title,  
-                    time=detailed_news.time,  
-                    content=detailed_news.content,  
-                    summary=result["影響"],  
-                    reason=result["原因"],  
+                    url=detailed_news.url,
+                    title=detailed_news.title,
+                    time=detailed_news.time,
+                    content=detailed_news.content,
+                    summary=result["影響"],
+                    reason=result["原因"],
                 )
                 add_news_to_db(detailed_news)  # 將新聞添加到數據庫
-    except Exception as e:
-        logger.error(f"Error in fetch_and_store_news: {e}")
-        raise
+            except Exception as e:
+                logger.error(f"Error adding news to database: {e}")
+                continue
 
 def fetch_news_info(search_term, is_initial_fetch=False):
     try:
