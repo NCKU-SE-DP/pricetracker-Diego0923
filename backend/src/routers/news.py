@@ -266,37 +266,3 @@ def news_exists(news_id, db: Session):
     except Exception as e:
         logger.error(f"Error in news_exists check for news ID {news_id}: {e}")
         raise
-
-#def fetch_and_store_news(is_initial=False):
-    """
-    get new info
-
-    :param is_initial:
-    :return:
-    """
-    try:
-        news_data = fetch_news_info("價格", is_initial)
-        for news in news_data:
-            title = news.title  
-            relevance = openai_client.evaluate_relevance(title)  # 評估相關性
-            if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
-                detailed_news = crawler.validate_and_parse(news.url)  # 驗證並解析新聞網址
-
-                if detailed_news is None:  # 如果詳細新聞為空
-                    continue  # 跳過
-
-                result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
-                result = json.loads(result) 
-                detailed_news = NewsWithSummary(
-                    url=detailed_news.url,  
-                    title=detailed_news.title,  
-                    time=detailed_news.time,  
-                    content=detailed_news.content,  
-                    summary=result["影響"],  
-                    reason=result["原因"],  
-                )
-                add_news_to_db(detailed_news)  # 將新聞添加到數據庫
-    except Exception as e:
-        logger.error(f"Error in fetch_and_store_news: {e}")
-        raise
-請幫我修改成一個try只包含一個功能
