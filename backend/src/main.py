@@ -62,16 +62,17 @@ background_scheduler.add_job(scheduled_fetch_and_store_news, "interval", minutes
 
 @app.on_event("startup")
 def start_scheduler():
-    try:
-        db = SessionLocal()
-        if db.query(NewsArticle).count() == 0:
-            # should change into simple factory pattern
-            fetch_and_store_news()
+    db = SessionLocal()
+    if db.query(NewsArticle).count() == 0:
+        # should change into simple factory pattern
+        fetch_and_store_news()
         db.close()
-        background_scheduler.add_job(fetch_and_store_news, "interval", minutes=DEFAULT_SCHEDULER_INTERVAL_MINUTES)
-        background_scheduler.start()
-    except Exception as e:
-        logger.error(f"Error occurred during scheduler startup: {e}")
+        try:
+            background_scheduler.add_job(fetch_and_store_news, "interval", minutes=DEFAULT_SCHEDULER_INTERVAL_MINUTES)
+            background_scheduler.start()
+        except Exception as e:
+            logger.error(f"Error setting up scheduler: {e}")
+            raise
 
 @app.on_event("shutdown")
 def shutdown_scheduler():
