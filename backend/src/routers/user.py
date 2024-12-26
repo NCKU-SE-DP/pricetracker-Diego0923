@@ -26,7 +26,6 @@ def register_user(user: UserAuthSchema, db: Session = Depends(get_db)):
         return db_user
     except Exception as e:
         logger.error(f"Error occurred while registering user: {user.username}. Error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 @router.post("/api/v1/users/login")
@@ -34,19 +33,19 @@ async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     """login"""
-    try:
-        user = db.query(User).filter(User.username == form_data.username).first()
-        if not user or not verify_password(form_data.password, user.hashed_password):
-            logger.warning(f"Invalid login attempt for username: {form_data.username}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Invalid login attempt for username: {form_data.username}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    try:
         access_token = create_access_token(
             data={"sub": str(user.username)}, expires_delta=timedelta(minutes=30)
         )
-        return {"access_token": access_token, "token_type": "bearer"}
     except Exception as e:
-        logger.error(f"Error occurred during login for username: {form_data.username}. Error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
+        logger.error(f"Error creating access token for username: {form_data.username}. Error: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating token")
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/api/v1/users/me", response_model=UserAuthSchema)
 def read_users_me(user=Depends(authenticate_user_token)):
