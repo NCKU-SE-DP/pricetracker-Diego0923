@@ -153,6 +153,7 @@ async def search_news(request: PromptRequest):
     return sorted_news_list
 
 
+
 def add_news_to_db(news_data):
     """
     將新聞資料添加到資料庫中
@@ -200,6 +201,7 @@ def fetch_and_store_news(is_initial=False):
                 logger.error(f"Error adding news to database: {e}")
                 continue
 
+
 def fetch_news_info(search_term, is_initial_fetch=False):
     try:
         return crawler.get_headline(search_term, (1, 10) if is_initial_fetch else 1)  # 獲取新聞標題
@@ -211,6 +213,7 @@ def process_news_item(news):
     """
     Fetches detailed content from a news article.
     """
+
     response = requests.get(news["titleLink"])
     soup = BeautifulSoup(response.text, "html.parser")
     # 標題
@@ -238,6 +241,7 @@ def process_news_item(news):
         "content": paragraphs,
     }
     return detailed_news
+
 
 def news_elements(news):
     try:

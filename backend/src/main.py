@@ -76,6 +76,7 @@ def start_scheduler():
             logger.error(f"Error setting up scheduler: {e}")
             raise
 
+
 @app.on_event("shutdown")
 def shutdown_scheduler():
     """
