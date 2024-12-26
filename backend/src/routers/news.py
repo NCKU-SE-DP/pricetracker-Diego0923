@@ -124,7 +124,6 @@ async def news_summary_custom_model(
         elif payload.ai_model == "anthropic":
             ai_client = anthropic_client
         result = ai_client.generate_summary(payload.content)
-        print("->", result, "<-")
         return parse_summary_result(result)
     except Exception as e:
         logger.error(f"Error in news_summary_custom_model: {e}")
@@ -132,23 +131,27 @@ async def news_summary_custom_model(
 
 @router.post("/api/v1/news/search_news")
 async def search_news(request: PromptRequest):
+    prompt = request.prompt
+    news_list = []
+    keywords = openai_client.extract_search_keywords(prompt)
     try:
-        prompt = request.prompt
-        news_list = []
-        keywords = openai_client.extract_search_keywords(prompt)
-        # Should change into simple factory pattern
         news_items = fetch_news_info(keywords, is_initial_fetch=False)
-        for news_item in news_items:
-            try:
-                detailed_news = news_elements(crawler.parse(news_item.url))
-                detailed_news["id"] = next(_id_counter)
-                news_list.append(detailed_news)
-            except Exception as e:
-                logger.warning(f"Error parsing news item {news_item.url}: {e}")
-        return sorted(news_list, key=lambda x: x["time"], reverse=True)
     except Exception as e:
-        logger.error(f"Error in search_news: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"Error fetching news info: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching news info")
+
+    for news_item in news_items:
+        try:
+            detailed_news = news_elements(crawler.parse(news_item.url))
+            detailed_news["id"] = next(_id_counter)
+            news_list.append(detailed_news)
+        except Exception as e:
+            logger.warning(f"Error parsing news item {news_item.url}: {e}")
+
+    sorted_news_list = sorted(news_list, key=lambda x: x["time"], reverse=True)
+
+    return sorted_news_list
+
 
 
 def add_news_to_db(news_data):
@@ -168,31 +171,36 @@ def fetch_and_store_news(is_initial=False):
     :param is_initial:
     :return:
     """
-    try:
-        news_data = fetch_news_info("價格", is_initial)
-        for news in news_data:
-            title = news.title  
-            relevance = openai_client.evaluate_relevance(title)  # 評估相關性
-            if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
+    news_data = fetch_news_info("價格", is_initial)
+    for news in news_data:
+        relevance = openai_client.evaluate_relevance(news.title)  # 評估相關性
+
+        if relevance == RelevanceEvaluation.HIGH:  # 如果相關性高
+            try:
                 detailed_news = crawler.validate_and_parse(news.url)  # 驗證並解析新聞網址
+            except Exception as e:
+                logger.error(f"Error validating and parsing news URL: {e}")
+                continue
 
-                if detailed_news is None:  # 如果詳細新聞為空
-                    continue  # 跳過
+            if detailed_news is None:  # 如果詳細新聞為空
+                continue  # 跳過
 
-                result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
-                result = json.loads(result) 
+            result = openai_client.generate_summary(" ".join(detailed_news.content))  # 生成摘要
+            result = json.loads(result)
+            try:
                 detailed_news = NewsWithSummary(
-                    url=detailed_news.url,  
-                    title=detailed_news.title,  
-                    time=detailed_news.time,  
-                    content=detailed_news.content,  
-                    summary=result["影響"],  
-                    reason=result["原因"],  
+                    url=detailed_news.url,
+                    title=detailed_news.title,
+                    time=detailed_news.time,
+                    content=detailed_news.content,
+                    summary=result["影響"],
+                    reason=result["原因"],
                 )
                 add_news_to_db(detailed_news)  # 將新聞添加到數據庫
-    except Exception as e:
-        logger.error(f"Error in fetch_and_store_news: {e}")
-        raise
+            except Exception as e:
+                logger.error(f"Error adding news to database: {e}")
+                continue
+
 
 def fetch_news_info(search_term, is_initial_fetch=False):
     try:
@@ -205,31 +213,35 @@ def process_news_item(news):
     """
     Fetches detailed content from a news article.
     """
-    try:
-        response = requests.get(news["titleLink"])
-        soup = BeautifulSoup(response.text, "html.parser")
-        # 標題
-        title = soup.find("h1", class_="article-content__title").text
-        time = soup.find("time", class_="article-content__time").text
-        # 定位到包含文章内容的 <section>
-        content_section = soup.find("section", class_="article-content__editor")
 
+    response = requests.get(news["titleLink"])
+    soup = BeautifulSoup(response.text, "html.parser")
+    # 標題
+    title = soup.find("h1", class_="article-content__title").text
+    time = soup.find("time", class_="article-content__time").text
+    # 定位到包含文章内容的 <section>
+    try:
+        content_section = soup.find("section", class_="article-content__editor")
+        if not content_section:
+            logger.error(f"No content section found for news {news.get('titleLink', 'unknown')}")
+            raise ValueError("Content section is missing")
         paragraphs = [
             p.text
             for p in content_section.find_all("p")
             if p.text.strip() != "" and "•" not in p.text
         ]
-        detailed_news = {
-            "url": news["titleLink"],
-            "title": title,
-            "time": time,
-            "content": paragraphs,
-        }
-
-        return detailed_news
     except Exception as e:
-        logger.error(f"Error in process_news_item for news {news.get('titleLink', 'unknown')}: {e}")
+        logger.error(f"Error extracting content for news {news.get('titleLink', 'unknown')}: {e}")
         raise
+
+    detailed_news = {
+        "url": news["titleLink"],
+        "title": title,
+        "time": time,
+        "content": paragraphs,
+    }
+    return detailed_news
+
 
 def news_elements(news):
     try:
