@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 import sentry_sdk
 from .config import (
@@ -23,6 +24,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
 # 初始化 Sentry，用於錯誤追蹤和性能監控
 sentry_sdk.init(

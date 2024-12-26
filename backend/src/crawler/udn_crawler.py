@@ -36,6 +36,7 @@ from requests import get, Response
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 from src.models import NewsArticle
+
 from src.crawler.crawler_base import NewsCrawlerBase, Headline, News, NewsWithSummary
 from src.crawler.exceptions import DomainMismatchException
 
